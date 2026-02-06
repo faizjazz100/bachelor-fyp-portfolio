@@ -1,0 +1,287 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import Image from "next/image";
+
+const API_URL = "https://speed-bump-yolov11-api.onrender.com/predict";
+
+// ---- Demo samples (put these files in /public/demo/) ----
+type SourceMode = "upload" | "samples";
+
+const SAMPLE_IMAGES = [
+    { id: "1", src: "/demo/1.jpg", label: "Sample 1" },
+    { id: "2", src: "/demo/2.jpg", label: "Sample 2" },
+    { id: "3", src: "/demo/3.jpg", label: "Sample 3" },
+    { id: "4", src: "/demo/4.jpg", label: "Sample 4" },
+    { id: "5", src: "/demo/5.jpg", label: "Sample 5" },
+];
+
+function formatElapsed(ms: number) {
+    const totalSeconds = Math.floor(ms / 1000);
+    const m = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
+    const s = String(totalSeconds % 60).padStart(2, "0");
+    return `${m}:${s}`;
+}
+
+export default function DemoPage() {
+    const [mode, setMode] = useState<SourceMode>("upload");
+    const [selectedSample, setSelectedSample] = useState<string>(SAMPLE_IMAGES[0].src);
+
+    const [file, setFile] = useState<File | null>(null);
+    const [previewUrl, setPreviewUrl] = useState<string>("");
+    const [resultUrl, setResultUrl] = useState<string>("");
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string>("");
+
+    const [elapsedMs, setElapsedMs] = useState(0);
+
+    // cleanup object URL to avoid memory leaks
+    useEffect(() => {
+        return () => {
+            if (previewUrl && previewUrl.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
+        };
+    }, [previewUrl]);
+
+    async function fileFromSample(url: string) {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error("Failed to load sample image.");
+        const blob = await res.blob();
+        const ext = blob.type.includes("png") ? "png" : "jpg";
+        return new File([blob], `sample.${ext}`, { type: blob.type });
+    }
+
+    async function run() {
+        setError("");
+        setResultUrl("");
+        setElapsedMs(0);
+
+        setLoading(true);
+        const startedAt = Date.now();
+        const timer = window.setInterval(() => setElapsedMs(Date.now() - startedAt), 100);
+
+        try {
+            let inputFile: File;
+
+            if (mode === "upload") {
+                if (!file) throw new Error("Please upload an image first.");
+                inputFile = file;
+            } else {
+                inputFile = await fileFromSample(selectedSample);
+            }
+
+            const form = new FormData();
+            form.append("image", inputFile);
+
+            const res = await fetch(API_URL, { method: "POST", body: form });
+
+            if (!res.ok) {
+                const txt = await res.text();
+                throw new Error(txt || "Prediction failed");
+            }
+
+            const data: { image_base64_png?: string } = await res.json();
+            if (!data.image_base64_png) throw new Error("No prediction image returned.");
+
+            setResultUrl(`data:image/png;base64,${data.image_base64_png}`);
+        } catch (e: unknown) {
+            if (e instanceof Error) setError(e.message);
+            else setError("Something went wrong.");
+        } finally {
+            window.clearInterval(timer);
+            setLoading(false);
+        }
+    }
+
+    function onPick(f: File | null) {
+        setFile(f);
+        setResultUrl("");
+        setError("");
+
+        if (!f) {
+            setPreviewUrl("");
+            return;
+        }
+        const url = URL.createObjectURL(f);
+        setPreviewUrl(url);
+    }
+
+    function pickSample(src: string) {
+        setMode("samples");
+        setSelectedSample(src);
+
+        // clear upload state
+        setFile(null);
+
+        // show sample as preview immediately
+        setPreviewUrl(src);
+
+        // clear previous output/errors
+        setResultUrl("");
+        setError("");
+    }
+
+    const canRun = mode === "upload" ? !!file : true;
+
+    return (
+        <main className="min-h-screen bg-neutral-950 text-neutral-50">
+            <header className="border-b border-neutral-800">
+                <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+                    <Link href="/" className="text-sm font-semibold">
+                        ← Back
+                    </Link>
+
+                    <a
+                        href="/poster.pdf"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="rounded-lg border border-neutral-800 px-3 py-2 text-sm hover:bg-neutral-900"
+                    >
+                        Poster
+                    </a>
+                </div>
+            </header>
+
+            <section className="mx-auto max-w-5xl px-6 py-10">
+                <h1 className="text-3xl font-semibold">Demo</h1>
+                <p className="mt-2 max-w-2xl text-neutral-300">
+                    Upload a road image or choose a prepared sample, then run YOLOv11 inference. The output image will show detected speed bumps.
+                </p>
+
+                <div className="mt-6 grid gap-6 sm:grid-cols-2">
+                    {/* Controls */}
+                    <div className="rounded-2xl border border-neutral-800 bg-neutral-900/30 p-6">
+                        <label className="text-sm text-neutral-300">Image Source</label>
+
+                        <div className="mt-2 flex gap-2">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setMode("upload");
+                                    setSelectedSample(SAMPLE_IMAGES[0].src);
+                                    setPreviewUrl("");
+                                    setResultUrl("");
+                                    setError("");
+                                    setFile(null);
+                                }}
+                                className={`rounded-lg border px-3 py-2 text-sm ${mode === "upload"
+                                    ? "border-neutral-200 bg-neutral-200 text-neutral-950"
+                                    : "border-neutral-800 text-neutral-200 hover:bg-neutral-900"
+                                    }`}
+                            >
+                                Upload
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => pickSample(selectedSample || SAMPLE_IMAGES[0].src)}
+                                className={`rounded-lg border px-3 py-2 text-sm ${mode === "samples"
+                                    ? "border-neutral-200 bg-neutral-200 text-neutral-950"
+                                    : "border-neutral-800 text-neutral-200 hover:bg-neutral-900"
+                                    }`}
+                            >
+                                Demo Samples
+                            </button>
+                        </div>
+
+                        {/* Upload mode */}
+                        {mode === "upload" && (
+                            <>
+                                <label className="mt-4 block text-sm text-neutral-300">Upload Image</label>
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="mt-2 w-full rounded-xl border border-neutral-800 bg-neutral-950 px-4 py-3 text-sm"
+                                    onChange={(e) => onPick(e.target.files?.[0] || null)}
+                                />
+                            </>
+                        )}
+
+                        {/* Sample mode */}
+                        {mode === "samples" && (
+                            <>
+                                <label className="mt-4 block text-sm text-neutral-300">Choose a sample</label>
+                                <div className="mt-2 grid grid-cols-2 gap-2">
+                                    {SAMPLE_IMAGES.map((s) => (
+                                        <button
+                                            key={s.id}
+                                            type="button"
+                                            onClick={() => pickSample(s.src)}
+                                            className={`rounded-xl border px-3 py-2 text-left text-sm ${selectedSample === s.src
+                                                ? "border-neutral-200 bg-neutral-200 text-neutral-950"
+                                                : "border-neutral-800 text-neutral-200 hover:bg-neutral-900"
+                                                }`}
+                                        >
+                                            {s.label}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <p className="mt-3 text-xs text-neutral-500">
+                                    Make sure your images exist at <span className="font-mono">public/demo/1.jpg</span> … <span className="font-mono">5.jpg</span>.
+                                </p>
+                            </>
+                        )}
+
+                        <button
+                            onClick={run}
+                            disabled={loading || !canRun}
+                            className="mt-4 w-full rounded-xl bg-white px-4 py-3 text-sm font-medium text-neutral-950 hover:opacity-90 disabled:opacity-60"
+                        >
+                            {loading ? `Running… ${formatElapsed(elapsedMs)}` : "Run Prediction"}
+                        </button>
+
+                        {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
+
+                        <p className="mt-4 text-xs text-neutral-500">
+                            Note: If you’re using a free host, the first run after inactivity may take longer (cold start).
+                        </p>
+                    </div>
+
+                    {/* Output */}
+                    <div className="rounded-2xl border border-neutral-800 bg-neutral-900/30 p-6">
+                        <h2 className="text-lg font-semibold">Output</h2>
+
+                        {!previewUrl && !resultUrl && (
+                            <p className="mt-3 text-sm text-neutral-400">
+                                Upload an image or choose a sample to preview it here, then run prediction.
+                            </p>
+                        )}
+
+                        {previewUrl && !resultUrl && (
+                            <div className="mt-4">
+                                <p className="text-xs uppercase tracking-wider text-neutral-500">
+                                    Input Preview
+                                </p>
+                                <Image
+                                    src={previewUrl}
+                                    alt="input preview"
+                                    width={800}
+                                    height={600}
+                                    className="mt-2 w-full rounded-xl border border-neutral-800"
+                                    unoptimized
+                                />
+                            </div>
+                        )}
+
+                        {resultUrl && (
+                            <div className="mt-4">
+                                <p className="text-xs uppercase tracking-wider text-neutral-500">
+                                    Prediction Result
+                                </p>
+                                <Image
+                                    src={resultUrl}
+                                    alt="prediction result"
+                                    width={800}
+                                    height={600}
+                                    className="mt-2 w-full rounded-xl border border-neutral-800"
+                                    unoptimized
+                                />
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </section>
+        </main>
+    );
+}
