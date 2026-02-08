@@ -27,6 +27,7 @@ export default function Page() {
         <h1 className="mt-4 text-4xl font-semibold leading-tight sm:text-5xl">
           Road Bump Detection{" "}
           <span className="text-neutral-400">for Improved Driver Safety</span>
+          Using Deep Learning
         </h1>
         <p className="mt-5 text-neutral-300 text-justify">
           Road anomalies such as speed bumps are critical for regulating traffic and ensuring safety. However,
@@ -177,6 +178,9 @@ export default function Page() {
           <div className="flex gap-4">
             <a className="hover:text-neutral-200" href="https://www.linkedin.com/in/zulhimifaiz/">
               LinkedIn
+            </a>
+            <a className="hover:text-neutral-200" href="https://zulhilmi-faiz.vercel.app/">
+              My Website
             </a>
             {/*<a className="hover:text-neutral-200" href="https://github.com/faizjazz100">
               GitHub
