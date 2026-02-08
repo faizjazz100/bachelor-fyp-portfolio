@@ -178,9 +178,10 @@ export default function Page() {
             <a className="hover:text-neutral-200" href="https://www.linkedin.com/in/zulhimifaiz/">
               LinkedIn
             </a>
-            <a className="hover:text-neutral-200" href="https://github.com/faizjazz100">
+            {/*<a className="hover:text-neutral-200" href="https://github.com/faizjazz100">
               GitHub
             </a>
+            */}
           </div>
         </div>
       </footer>
